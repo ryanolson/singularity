@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash -x
 # 
 # Copyright (c) 2017, SingularityWare, LLC. All rights reserved.
 #
@@ -23,6 +23,47 @@
 
 
 message 2 "Evaluating args: '$*'\n"
+
+NVIDIA_CONTAINER_SCRIPTS=${NVIDIA_CONTAINER_SCRIPTS:-/etc/singularity}
+nv_parse()
+{
+    if [ -f ${NVIDIA_CONTAINER_SCRIPTS}/nvidia-container-libs.py ]; then
+       NV_GREP="`${NVIDIA_CONTAINER_SCRIPTS}/nvidia-container-libs.py`"
+    else
+       NV_GREP="/libnv|/libcuda|/libEGL|/libGL|/libnvcu|/libvdpau|/libOpenCL|/libOpenGL"
+    fi
+    for i in `ldconfig -p | grep -E "${NV_GREP}"`; do
+        if [ -f "$i" ]; then
+            message 2 "Found NV library: $i\n"
+            if [ -z "${SINGULARITY_CONTAINLIBS:-}" ]; then
+                SINGULARITY_CONTAINLIBS="$i"
+            else
+                SINGULARITY_CONTAINLIBS="$SINGULARITY_CONTAINLIBS,$i"
+            fi
+        fi
+    done
+    if [ -z "${SINGULARITY_CONTAINLIBS:-}" ]; then
+        message WARN "Could not find any Nvidia libraries on this host!\n";
+    else
+        export SINGULARITY_CONTAINLIBS
+    fi
+    if [ -f ${NVIDIA_CONTAINER_SCRIPTS}/nvidia-smi-path.py ]; then
+        NVIDIA_SMI_PATH=$(${NVIDIA_CONTAINER_SCRIPTS}/nvidia-smi-path.py)
+    else
+        NVIDIA_SMI_PATH=`which nvidia-smi`
+    fi
+    if [ ! -z "${NVIDIA_SMI_PATH}" ]; then
+        if [ -n "${SINGULARITY_BINDPATH:-}" ]; then
+            SINGULARITY_BINDPATH="${SINGULARITY_BINDPATH},${NVIDIA_SMI_PATH}:/usr/local/nvidia/bin"
+        else
+            SINGULARITY_BINDPATH="${NVIDIA_SMI_PATH}:/usr/local/nvidia/bin"
+        fi
+        export SINGULARITY_BINDPATH
+    fi
+}
+
+nv_default=${SINGULARITY_NVIDIA_DEFAULT:-true}
+nv_parsed=false
 
 while true; do
     case ${1:-} in
@@ -116,21 +157,8 @@ while true; do
         ;;
         -n|--nv)
             shift
-            for i in `ldconfig -p | grep -E "/libnv|/libcuda|/libEGL|/libGL|/libnvcu|/libvdpau|/libOpenCL|/libOpenGL"`; do
-                if [ -f "$i" ]; then
-                    message 2 "Found NV library: $i\n"
-                    if [ -z "${SINGULARITY_CONTAINLIBS:-}" ]; then
-                        SINGULARITY_CONTAINLIBS="$i"
-                    else
-                        SINGULARITY_CONTAINLIBS="$SINGULARITY_CONTAINLIBS,$i"
-                    fi
-                fi
-            done
-            if [ -z "${SINGULARITY_CONTAINLIBS:-}" ]; then
-                message WARN "Could not find any Nvidia libraries on this host!\n";
-            else
-                export SINGULARITY_CONTAINLIBS
-            fi
+            nv_parse
+            nv_parsed=true
         ;;
         -*)
             message ERROR "Unknown option: ${1:-}\n"
@@ -141,3 +169,7 @@ while true; do
         ;;
     esac
 done
+
+if "$nv_default" && ! "$nv_parsed"; then
+    nv_parse
+fi
