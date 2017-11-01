@@ -41,11 +41,11 @@ declare -A desc
 desc[singularity]="Singularity containers command line interface"
 desc[run-singularity]="launch a Singularity containers with a runscript"
 
-for b in singularity run-singularity; do
-    cp -p ${PKGDIR}/usr/bin/$b "$tbindir/"
-    sed -i -e "s,^prefix=.*,prefix=${PKGDIR}/usr,g" "$tbindir/$b"
-    manpage=${PKGDIR}/usr/share/man/man1/$b.1
-    PATH=$tbindir:$PATH
-        help2man -n "${desc[$b]}" --no-info "${tbindir}/$b" --version-string "$VERSION" >| $manpage
-    grep -q -e 'Error loading functions' $manpage && exit 1 || :
-done
+#for b in singularity run-singularity; do
+#    cp -p ${PKGDIR}/usr/bin/$b "$tbindir/"
+#    sed -i -e "s,^prefix=.*,prefix=${PKGDIR}/usr,g" "$tbindir/$b"
+#    manpage=${PKGDIR}/usr/share/man/man1/$b.1
+#    PATH=$tbindir:$PATH
+#        help2man -n "${desc[$b]}" --no-info "${tbindir}/$b" --version-string "$VERSION" >| $manpage
+#    grep -q -e 'Error loading functions' $manpage && exit 1 || :
+#done
