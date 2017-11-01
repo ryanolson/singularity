@@ -286,17 +286,21 @@ int s_mkpath(char *dir, mode_t mode) {
     }
 
     if (strcmp(dir, "/") == 0 ) {
+        singularity_message(DEBUG, "Directory is '/', returning '0'\n");
         return(0);
     }
 
     if ( is_dir(dir) == 0 ) {
-        // Directory already exists, stop...
+        singularity_message(DEBUG, "Directory exists, returning '0': %s\n", dir);
         return(0);
     }
 
-    if ( s_mkpath(dirname(strdupa(dir)), mode) < 0 ) {
-        // Return if priors failed
-        return(-1);
+    if ( is_dir(dirname(strdupa(dir))) < 0 ) {
+        singularity_message(DEBUG, "Creating parent directory: %s\n", dirname(strdupa(dir)));
+        if ( s_mkpath(dirname(strdupa(dir)), mode) < 0 ) {
+            singularity_message(VERBOSE, "Failed to create parent directory %s\n", dir);
+            return(-1);
+        }
     }
 
     singularity_message(DEBUG, "Creating directory: %s\n", dir);
@@ -305,7 +309,7 @@ int s_mkpath(char *dir, mode_t mode) {
     umask(mask); // Flawfinder: ignore
 
     if ( ret < 0 ) {
-        if ( is_dir(dir) < 0 ) { // It is possible that the directory was created between above check and mkdir()
+        if ( errno != EEXIST ) {
             singularity_message(DEBUG, "Opps, could not create directory %s: (%d) %s\n", dir, errno, strerror(errno));
             return(-1);
         }
@@ -359,7 +363,7 @@ int copy_file(char * source, char * dest) {
     singularity_message(DEBUG, "Called copy_file(%s, %s)\n", source, dest);
 
     if ( is_file(source) < 0 ) {
-        singularity_message(ERROR, "Could not copy from non-existant source: %s\n", source);
+        singularity_message(ERROR, "Could not copy from non-existent source: %s\n", source);
         return(-1);
     }
 
@@ -463,6 +467,95 @@ char *filecat(char *path) {
     fclose(fd);
 
     return(ret);
+}
+
+/* 
+ * Open and exclusive-lock file, creating it (-rw-------)
+ * if necessary. If fdptr is not NULL, the descriptor is
+ * saved there. The descriptor is never one of the standard
+ * descriptors STDIN_FILENO, STDOUT_FILENO, or STDERR_FILENO.
+ * If successful, the function returns 0.
+ * Otherwise, the function returns nonzero errno:
+ *     EINVAL: Invalid lock file path
+ *     EMFILE: Too many open files
+ *     EALREADY: Already locked
+ * or one of the open(2)/creat(2) errors.
+ */
+int filelock(const char *const filepath, int *const fdptr) {
+    struct flock lock;
+    int used = 0; /* Bits 0 to 2: stdin, stdout, stderr */
+    int fd;
+
+    singularity_message(DEBUG, "Called filelock(%s)\n", filepath);
+    
+    /* In case the caller is interested in the descriptor,
+     * initialize it to -1 (invalid). */
+    if (fdptr)
+        *fdptr = -1;
+
+    /* Invalid path? */
+    if (filepath == NULL || *filepath == '\0')
+        return errno = EINVAL;
+
+    /* Open the file. */
+    do {
+        fd = open(filepath, O_RDWR | O_CREAT, 0644);
+    } while (fd == -1 && errno == EINTR);
+    if (fd == -1) {
+        if (errno == EALREADY)
+            errno = EIO;
+        return errno;
+    }
+
+    /* Move fd away from the standard descriptors. */
+    while (1) {
+        if( fd == STDIN_FILENO ) {
+            used |= 1;
+            fd = dup(fd);
+        } else if ( fd == STDOUT_FILENO ) {
+            used |= 2;
+            fd = dup(fd);
+        } else if( fd == STDERR_FILENO ) {
+            used |= 4;
+            fd = dup(fd);
+        } else {
+            break;
+        }
+    }
+    
+    /* Close the standard descriptors we temporarily used. */
+    if (used & 1)
+        close(STDIN_FILENO);
+    if (used & 2)
+        close(STDOUT_FILENO);
+    if (used & 4)
+        close(STDERR_FILENO);
+
+    /* Did we run out of descriptors? */
+    if (fd == -1)
+        return errno = EMFILE;    
+
+    /* Exclusive lock, cover the entire file (regardless of size). */
+    lock.l_type = F_WRLCK;
+    lock.l_whence = SEEK_SET;
+    lock.l_start = 0;
+    lock.l_len = 0;
+    if (fcntl(fd, F_SETLK, &lock) == -1) {
+        /* Lock failed. Close file and report locking failure. */
+        close(fd);
+        return errno = EALREADY;
+    }
+
+    if ( fcntl(fd, F_SETFD, FD_CLOEXEC) != 0 ) {
+        close(fd);
+        return errno = EBADF;
+    }
+
+    /* Save descriptor, if the caller wants it. */
+    if (fdptr)
+        *fdptr = fd;
+
+    return 0;
 }
 
 

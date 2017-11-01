@@ -32,6 +32,7 @@
 #include <pwd.h>
 #include <linux/limits.h>
 
+#include "config.h"
 #include "util/file.h"
 #include "util/util.h"
 #include "util/message.h"
@@ -48,7 +49,7 @@
 int _singularity_runtime_mount_hostfs(void) {
     FILE *mounts;
     char *line = NULL;
-    char *container_dir = singularity_runtime_rootfs(NULL);
+    char *container_dir = CONTAINER_FINALDIR;
 
     if ( singularity_config_get_bool(MOUNT_HOSTFS) <= 0 ) {
         singularity_message(DEBUG, "Not mounting host file systems per configuration\n");
@@ -107,6 +108,10 @@ int _singularity_runtime_mount_hostfs(void) {
             singularity_message(DEBUG, "Skipping /sys based file system: %s,%s,%s\n", source, mountpoint, filesystem);
             continue;
         }
+        if ( strncmp(mountpoint, "/boot", 5) == 0 ) {
+            singularity_message(DEBUG, "Skipping /boot based file system: %s,%s,%s\n", source, mountpoint, filesystem);
+            continue;
+        }
         if ( strncmp(mountpoint, "/proc", 5) == 0 ) {
             singularity_message(DEBUG, "Skipping /proc based file system: %s,%s,%s\n", source, mountpoint, filesystem);
             continue;
@@ -152,7 +157,7 @@ int _singularity_runtime_mount_hostfs(void) {
                 }
                 singularity_priv_drop();
             } else {
-                singularity_message(WARNING, "Non existant 'bind point' directory in container: '%s'\n", mountpoint);
+                singularity_message(WARNING, "Non existent 'bind point' directory in container: '%s'\n", mountpoint);
                 continue;
             }
         }
@@ -160,12 +165,12 @@ int _singularity_runtime_mount_hostfs(void) {
 
         singularity_priv_escalate();
         singularity_message(VERBOSE, "Binding '%s'(%s) to '%s/%s'\n", mountpoint, filesystem, container_dir, mountpoint);
-        if ( mount(mountpoint, joinpath(container_dir, mountpoint), NULL, MS_BIND|MS_NOSUID|MS_REC, NULL) < 0 ) {
+        if ( mount(mountpoint, joinpath(container_dir, mountpoint), NULL, MS_BIND|MS_NOSUID|MS_NODEV|MS_REC, NULL) < 0 ) {
             singularity_message(ERROR, "There was an error binding the path %s: %s\n", mountpoint, strerror(errno));
             ABORT(255);
         }
         if ( singularity_priv_userns_enabled() != 1 ) {
-            if ( mount(NULL, joinpath(container_dir, mountpoint), NULL, MS_BIND|MS_NOSUID|MS_REC|MS_REMOUNT, NULL) < 0 ) {
+            if ( mount(NULL, joinpath(container_dir, mountpoint), NULL, MS_BIND|MS_NOSUID|MS_NODEV|MS_REC|MS_REMOUNT, NULL) < 0 ) {
                 singularity_message(ERROR, "There was an error remounting the path %s: %s\n", mountpoint, strerror(errno));
                 ABORT(255);
             }

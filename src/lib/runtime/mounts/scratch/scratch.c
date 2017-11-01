@@ -33,6 +33,7 @@
 #include <libgen.h>
 #include <linux/limits.h>
 
+#include "config.h"
 #include "util/file.h"
 #include "util/util.h"
 #include "util/message.h"
@@ -45,7 +46,7 @@
 
 
 int _singularity_runtime_mount_scratch(void) {
-    char *container_dir = singularity_runtime_rootfs(NULL);
+    char *container_dir = CONTAINER_FINALDIR;
     char *scratchdir_path;
     char *tmpdir_path;
     char *sourcedir_path;
@@ -64,8 +65,8 @@ int _singularity_runtime_mount_scratch(void) {
     }
 
 #ifndef SINGULARITY_NO_NEW_PRIVS
-        singularity_message(WARNING, "Not mounting scratch: host does not support PR_SET_NO_NEW_PRIVS\n");
-        return(0);
+    singularity_message(WARNING, "Not mounting scratch: host does not support PR_SET_NO_NEW_PRIVS\n");
+    return(0);
 #endif  
 
     singularity_message(DEBUG, "Checking SINGULARITY_WORKDIR from environment\n");
@@ -103,19 +104,21 @@ int _singularity_runtime_mount_scratch(void) {
                 singularity_priv_drop();
                 if ( r < 0 ) {
                     singularity_message(VERBOSE, "Skipping scratch directory mount, could not create dir inside container %s: %s\n", current, strerror(errno));
+                    current = strtok_r(NULL, ",", &outside_token);
                     continue;
                 }
             } else {
                 singularity_message(WARNING, "Skipping scratch directory mount, target directory does not exist: %s\n", current);
+                current = strtok_r(NULL, ",", &outside_token);
                 continue;
             }
         }
 
         singularity_priv_escalate();
         singularity_message(VERBOSE, "Binding '%s' to '%s/%s'\n", full_sourcedir_path, container_dir, current);
-        r = mount(full_sourcedir_path, joinpath(container_dir, current), NULL, MS_BIND|MS_NOSUID|MS_REC, NULL);
+        r = mount(full_sourcedir_path, joinpath(container_dir, current), NULL, MS_BIND|MS_NOSUID|MS_NODEV|MS_REC, NULL);
         if ( singularity_priv_userns_enabled() != 1 ) {
-            r += mount(NULL, joinpath(container_dir, current), NULL, MS_BIND|MS_NOSUID|MS_REC|MS_REMOUNT, NULL);
+            r += mount(NULL, joinpath(container_dir, current), NULL, MS_BIND|MS_NOSUID|MS_NODEV|MS_REC|MS_REMOUNT, NULL);
         }
         singularity_priv_drop();
         if ( r < 0 ) {

@@ -31,8 +31,7 @@ CONTAINER="$SINGULARITY_TESTDIR/container.img"
 TESTDIR="$SINGULARITY_TESTDIR/home_test"
 
 # Creating a new container
-stest 0 singularity create -s 568 "$CONTAINER"
-stest 0 sudo singularity bootstrap "$CONTAINER" "../examples/busybox/Singularity"
+stest 0 sudo singularity build "$CONTAINER" "../examples/busybox/Singularity"
 stest 0 singularity exec "$CONTAINER" true
 stest 1 singularity exec "$CONTAINER" false
 
@@ -47,7 +46,7 @@ stest 1 singularity exec --workdir "$SINGULARITY_TESTDIR" --contain "$CONTAINER"
 
 # Testing --pwd
 stest 0 singularity exec --pwd /etc "$CONTAINER" true
-stest 1 singularity exec --pwd /non-existant-dir "$CONTAINER" true
+stest 1 singularity exec --pwd /non-existent-dir "$CONTAINER" true
 stest 0 sh -c "singularity exec --pwd /etc '$CONTAINER' pwd | egrep '^/etc'"
 
 # Testing --home

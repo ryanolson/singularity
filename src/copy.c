@@ -60,13 +60,12 @@ int main(int argc, char **argv) {
     singularity_registry_init();
     singularity_priv_drop();
 
-    singularity_registry_set("IMAGE", argv[1]);
-
     singularity_sessiondir();
 
     image = singularity_image_init(singularity_registry_get("IMAGE"));
 
-    singularity_image_open(&image, O_RDWR);
+//    singularity_image_open(&image, O_RDWR);
+//    singularity_image_check(&image);
 
     singularity_registry_set("WRITABLE", "1");
 
@@ -92,7 +91,7 @@ int main(int argc, char **argv) {
     }
 
     singularity_priv_escalate();
-    retval = singularity_fork_exec(cp_cmd);
+    retval = singularity_fork_exec(0, cp_cmd);
     singularity_priv_drop();
 
     if ( retval != 0 ) {
